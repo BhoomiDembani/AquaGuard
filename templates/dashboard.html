@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AquaGuard - Water Infrastructure Monitor</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="drop">💧</span>
+    <div>
+      <h1>AquaGuard</h1>
+      <p class="tagline">AI-Based Water Leak &amp; Theft Detection &middot; SDG 6</p>
+    </div>
+  </div>
+  <button id="refreshBtn" class="refresh-btn">↻ Refresh Data</button>
+</header>
+
+<section class="summary-grid">
+  <div class="card">
+    <p class="card-label">Total Alerts</p>
+    <p class="card-value">{{ summary.total_alerts }}</p>
+  </div>
+  <div class="card severity-high">
+    <p class="card-label">High Severity</p>
+    <p class="card-value">{{ summary.by_severity.get('High', 0) }}</p>
+  </div>
+  <div class="card severity-medium">
+    <p class="card-label">Medium Severity</p>
+    <p class="card-value">{{ summary.by_severity.get('Medium', 0) }}</p>
+  </div>
+  <div class="card">
+    <p class="card-label">Zones Affected</p>
+    <p class="card-value">{{ summary.zones_affected }} / {{ zones|length }}</p>
+  </div>
+  <div class="card water-loss">
+    <p class="card-label">Est. Anomalous Flow</p>
+    <p class="card-value">{{ summary.estimated_water_loss_liters }} L/hr</p>
+  </div>
+</section>
+
+<section class="main-panel">
+  <h2>Active Alerts</h2>
+  <table class="alerts-table">
+    <thead>
+      <tr>
+        <th>Timestamp</th>
+        <th>Zone</th>
+        <th>Type</th>
+        <th>Flow Rate</th>
+        <th>Severity</th>
+        <th>Reason (Explainable AI)</th>
+      </tr>
+    </thead>
+    <tbody id="alertsBody">
+      {% for a in alerts %}
+      <tr class="row-{{ a.severity|lower }}">
+        <td>{{ a.timestamp }}</td>
+        <td>{{ a.zone }}</td>
+        <td><span class="tag tag-{{ a.type|lower|replace('/', '-') }}">{{ a.type }}</span></td>
+        <td>{{ a.flow_rate }} L/hr</td>
+        <td><span class="badge badge-{{ a.severity|lower }}">{{ a.severity }}</span></td>
+        <td class="reason">{{ a.reason }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="empty">No anomalies detected in current window.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="main-panel chart-panel">
+  <h2>Zone Flow Trend (72 hrs)</h2>
+  <div class="chart-controls">
+    <label for="zoneSelect">Zone:</label>
+    <select id="zoneSelect">
+      {% for z in zones %}
+      <option value="{{ z }}">{{ z }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <canvas id="zoneChart" height="90"></canvas>
+</section>
+
+<section class="responsible-ai">
+  <h2>Responsible AI Considerations</h2>
+  <ul>
+    <li><strong>Fairness:</strong> Rules apply uniformly across all zones — no zone is assumed "high risk" by default.</li>
+    <li><strong>Transparency:</strong> Every alert includes a plain-language reason. No black-box scoring — all thresholds are visible and explainable.</li>
+    <li><strong>Ethics:</strong> Flags support human review and decision-making; the system does not take autonomous action (e.g. shutting off water) without a human in the loop.</li>
+    <li><strong>Privacy:</strong> Detection works on zone-level aggregate flow data only — no individual household or personal usage data is collected or processed.</li>
+  </ul>
+</section>
+
+<footer>
+  <p>1M1B AI for Sustainability Virtual Internship &middot; IBM SkillsBuild &amp; AICTE &middot; SDG 6: Clean Water and Sanitation</p>
+</footer>
+
+<script>
+document.getElementById('refreshBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('refreshBtn');
+  btn.textContent = 'Refreshing...';
+  const res = await fetch('/api/refresh');
+  await res.json();
+  window.location.reload();
+});
+
+let zoneChart;
+
+async function loadZoneChart(zoneName) {
+  const res = await fetch(`/api/zone/${encodeURIComponent(zoneName)}`);
+  const data = await res.json();
+
+  const labels = data.map(r => r.timestamp);
+  const flows = data.map(r => r.flow_rate);
+
+  const ctx = document.getElementById('zoneChart').getContext('2d');
+  if (zoneChart) zoneChart.destroy();
+
+  zoneChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: zoneName + ' flow rate (L/hr)',
+        data: flows,
+        borderColor: '#2fb8c6',
+        backgroundColor: 'rgba(47,184,198,0.15)',
+        pointRadius: 0,
+        borderWidth: 2,
+        fill: true,
+        tension: 0.25,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { labels: { color: '#e5edf5' } } },
+      scales: {
+        x: { ticks: { color: '#8ea0b8', maxTicksLimit: 8 }, grid: { color: '#1f2a40' } },
+        y: { ticks: { color: '#8ea0b8' }, grid: { color: '#1f2a40' }, title: { display: true, text: 'L/hr', color: '#8ea0b8' } }
+      }
+    }
+  });
+}
+
+const zoneSelect = document.getElementById('zoneSelect');
+zoneSelect.addEventListener('change', () => loadZoneChart(zoneSelect.value));
+loadZoneChart(zoneSelect.value);
+</script>
+
+</body>
+</html>
